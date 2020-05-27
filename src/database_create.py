@@ -89,7 +89,6 @@ def create_db(db_name):
         c.execute(
             '''
             CREATE TABLE IF NOT EXISTS zipcode(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 zip_code INTEGER PRIMARY KEY,
                 city_id INTEGER NOT NULL REFERENCES city(id));
             '''
