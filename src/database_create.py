@@ -68,8 +68,8 @@ def create_db(db_name):
             '''
             CREATE TABLE IF NOT EXISTS color(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                hex TEXT NOT NULL);
+                name TEXT NOT NULL,
+                hex TEXT NOT NULL UNIQUE);
              '''
         )
         c.execute(
