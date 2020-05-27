@@ -1,7 +1,7 @@
 from flask import Flask
 from src.database import db
 
-from blueprints.register import bp as reg_bp
+from src.blueprints.register import bp as reg_bp
 
 app = Flask(__name__)
 
