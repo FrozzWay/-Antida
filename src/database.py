@@ -33,5 +33,4 @@ class Sqlite3Db:
         return self._connection
 
 
-
 db = Sqlite3Db()

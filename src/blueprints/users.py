@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash
 bp = Blueprint('users', __name__)
 
 
+# Регистрация аккаунта
 @bp.route('/', methods=["POST"])
 def register():
     request_json = request.json
@@ -19,7 +20,7 @@ def register():
     is_seller = request_json.get('is_seller')
     is_seller = True if is_seller else False
 
-    user= {
+    user = {
         "email": request_json.get('email'),
         "password": request_json.get('password'),
         "first_name": request_json.get('first_name'),
@@ -33,8 +34,7 @@ def register():
     }
 
     password_hash = generate_password_hash(user['password'])
-    print(user['password'])
-    print(password_hash)
+
     con = db.connection
     cursor = con.cursor()
     cursor.execute(
@@ -62,11 +62,14 @@ def register():
     return jsonify(user), 200
 
 
+# Получение данных об аккаунте и их изменение
 class UsersView(MethodView):
     def get(self, id):
         user_id = session.get('user_id')
+
         if user_id is None:
             return '', 403
+
         con = db.connection
         cursor = con.execute(
             'SELECT * '
@@ -77,6 +80,7 @@ class UsersView(MethodView):
         account = dict(cursor.fetchone())
         account['is_seller'] = False
         del(account['password'])
+
         cursor.execute(
             'SELECT zip_code, street, phone, home '
             'FROM seller '
@@ -84,13 +88,53 @@ class UsersView(MethodView):
             (account['id'],)
         )
         seller = cursor.fetchone()
+
         if seller is None:
             return jsonify(account), 200
+
         seller = dict(seller)
         account.update(seller)
         account['is_seller'] = True
         return jsonify(account), 200
 
+    def patch(self, id):
+        user_id = session.get('user_id')
+        if id != user_id:
+            return '', 403
+
+        request_json = request.json
+
+        account = {
+            "first_name": request_json.get('first_name'),
+            "last_name": request_json.get('password'),
+        }
+        is_seller = request_json.get('is_seller')
+        seller = {
+            "phone": request_json.get('phone'),
+            "zip_code": request_json.get('zip_code'),
+            "city_id": request_json.get('city_id'),
+            "street": request_json.get('street'),
+            "home": request_json.get('home'),
+        }
+
+        account_params = ','.join(f" {key} = '{val}'" for key, val in account.items() if val is not None)
+        seller_params = ','.join(f" {key} = '{val}'" for key, val in seller.items() if val is not None)
+
+        con = db.connection
+        cursor = con.cursor()
+
+        if is_seller is False:
+            cursor.execute(
+                f'DELETE FROM seller WHERE account_id = {id};'
+            )
+
+        if is_seller:
+            cursor.execute(f'UPDATE seller SET{seller_params} WHERE account_id = {id};')
+
+        cursor.execute(f'UPDATE account SET{account_params} WHERE id = {id};')
+
+        con.commit()
+        return self.get(id)
 
 
 bp.add_url_rule('/<int:id>', view_func=UsersView.as_view('users'))
