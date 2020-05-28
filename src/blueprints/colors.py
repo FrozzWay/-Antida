@@ -20,22 +20,22 @@ class ColorsView(MethodView):
     def post(self):
         user_id = session.get("user_id")
         if user_id is None:
-            return '', 403
+            return 'need login first', 403
 
         con = db.connection
-        cursor = con.execute(f'SELECT * FROM seller WHERE seller.id = {user_id}')
+        cursor = con.execute(f'SELECT * FROM seller WHERE seller.account_id = {user_id}')
         if cursor.fetchone() is None:
-            return '', 403
+            return 'you are not a seller', 403
 
         request_json = request.json
         name = request_json.get('name')
         hex = request_json.get('hex')
 
-        con.execute('INSERT INTO color (name, hex) VALUES (?, ?)', (name, hex))
+        cursor.execute('INSERT INTO color (name, hex) VALUES (?, ?)', (name, hex))
         con.commit()
 
-        cursor = con.execute('SELECT id FROM color WHERE color.hex = ?', (hex,))
-        color_id = dict(cursor.fetchone())['id']
+        color_id = cursor.lastrowid
+        print(color_id)
 
         response = {
             "id": color_id,

@@ -27,7 +27,7 @@ def login():
     if not check_password_hash(user['password'], password):
         print(generate_password_hash(password))
         print(user['password'])
-        return '', 403
+        return 'invalid password or email', 403
 
     session['user_id'] = user['id']
     return '', 200
@@ -37,4 +37,3 @@ def login():
 def logout():
     session.pop('user_id', None)
     return '', 200
-

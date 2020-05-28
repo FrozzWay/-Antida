@@ -20,17 +20,16 @@ class CitiesView(MethodView):
     def post(self):
         name = request.json.get('name')
         con = db.connection
-        cursor = con.execute(
+        cursor = con.cursor()
+        cursor.execute(
             f'INSERT INTO city (name) VALUES (?);', (name,)
         )
         con.commit()
-        cursor.execute('SELECT id FROM city WHERE city.name = ?', (name,))
         response = {
-            "id": dict(cursor.fetchone())['id'],
+            "id": cursor.lastrowid,
             "name": name
         }
         return jsonify(response), 200
-
 
 
 bp.add_url_rule('/cities', view_func=CitiesView.as_view('city'))

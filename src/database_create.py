@@ -34,7 +34,8 @@ def create_db(db_name):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 car_id INTEGER NOT NULL REFERENCES car(id),
-                seller_id INTEGER NOT NULL REFERENCES seller(id)
+                seller_id INTEGER NOT NULL REFERENCES seller(id),
+                posted TEXT NOT NULL
                 );
              '''
         )
@@ -44,7 +45,7 @@ def create_db(db_name):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 make TEXT NOT NULL,
                 model TEXT NOT NULL,
-                num_owners INTEGER,
+                num_owners INTEGER DEFAULT 1,
                 reg_number TEXT NOT NULL,
                 mileage INTEGER NOT NULL);
              '''
@@ -75,6 +76,7 @@ def create_db(db_name):
         c.execute(
             '''
             CREATE TABLE IF NOT EXISTS carcolor(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 color_id INTEGER NOT NULL REFERENCES color(id),
                 car_id INTEGER NOT NULL REFERENCES car(id));
              '''
@@ -91,5 +93,21 @@ def create_db(db_name):
             CREATE TABLE IF NOT EXISTS zipcode(
                 zip_code INTEGER PRIMARY KEY,
                 city_id INTEGER NOT NULL REFERENCES city(id));
+            '''
+        )
+        c.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS image(
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL);
+            '''
+        )
+        c.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS carimage(
+                id INTEGER PRIMARY KEY,
+                car_id INTEGER NOT NULL REFERENCES car(id),
+                image_id TEXT NOT NULL REFERENCES image(id));
             '''
         )

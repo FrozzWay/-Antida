@@ -1,4 +1,3 @@
-import sqlite3
 from flask import (
     Blueprint,
     request,
@@ -44,19 +43,16 @@ def register():
     )
     con.commit()
     if is_seller is not False:
-        cursor.execute(
-            'SELECT id '
-            'FROM account '
-            'WHERE account.email = ?; ',
-            (user['email'],)
-        )
-        account_id = cursor.fetchone()['id']
-        user['id'] = account_id
-        print(account_id)
+        user['id'] = cursor.lastrowid
         cursor.execute(
             'INSERT INTO seller (zip_code, street, home, phone, city_id, account_id) '
             'VALUES (?,?,?,?,?,?);',
-            (user['zip_code'], user['street'], user['home'], user['phone'], user['city_id'], account_id)
+            (user['zip_code'], user['street'], user['home'], user['phone'], user['city_id'], user['id'])
+        )
+        cursor.execute(
+            'INSERT INTO zipcode (zip_code, city_id) '
+            'VALUES (?,?);',
+            (user['zip_code'], user['city_id'])
         )
         con.commit()
     return jsonify(user), 200
@@ -68,7 +64,7 @@ class UsersView(MethodView):
         user_id = session.get('user_id')
 
         if user_id is None:
-            return '', 403
+            return 'need to login', 403
 
         con = db.connection
         cursor = con.execute(
@@ -100,7 +96,7 @@ class UsersView(MethodView):
     def patch(self, id):
         user_id = session.get('user_id')
         if id != user_id:
-            return '', 403
+            return 'not your id in route', 403
 
         request_json = request.json
 
