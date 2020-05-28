@@ -124,10 +124,10 @@ class UsersView(MethodView):
                 f'DELETE FROM seller WHERE account_id = {id};'
             )
 
-        if is_seller:
+        if is_seller and seller_params:
             cursor.execute(f'UPDATE seller SET{seller_params} WHERE account_id = {id};')
-
-        cursor.execute(f'UPDATE account SET{account_params} WHERE id = {id};')
+        if account_params:
+            cursor.execute(f'UPDATE account SET{account_params} WHERE id = {id};')
 
         con.commit()
         return self.get(id)
