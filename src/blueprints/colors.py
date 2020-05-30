@@ -4,6 +4,7 @@ Blueprint, session, request, jsonify
 
 from src.database import db
 from flask.views import MethodView
+import src.auth as a
 
 bp = Blueprint('colors', __name__)
 
@@ -17,15 +18,10 @@ class ColorsView(MethodView):
         colors = [dict(row) for row in cursor.fetchall()]
         return jsonify(colors), 200
 
-    def post(self):
-        user_id = session.get("user_id")
-        if user_id is None:
-            return 'need login first', 403
-
+    @a.seller_auth_required
+    def post(self, user_id, seller_id):
         con = db.connection
-        cursor = con.execute(f'SELECT * FROM seller WHERE seller.account_id = {user_id}')
-        if cursor.fetchone() is None:
-            return 'you are not a seller', 403
+        cursor = con.cursor()
 
         request_json = request.json
         name = request_json.get('name')

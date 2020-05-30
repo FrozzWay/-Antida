@@ -35,7 +35,7 @@ def create_db(db_name):
                 title TEXT NOT NULL,
                 car_id INTEGER NOT NULL REFERENCES car(id),
                 seller_id INTEGER NOT NULL REFERENCES seller(id),
-                posted TEXT NOT NULL
+                date TEXT NOT NULL
                 );
              '''
         )

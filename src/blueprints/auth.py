@@ -24,9 +24,7 @@ def login():
     )
     user = cursor.fetchone()
 
-    if not check_password_hash(user['password'], password):
-        print(generate_password_hash(password))
-        print(user['password'])
+    if user is None or not check_password_hash(user['password'], password):
         return 'invalid password or email', 403
 
     session['user_id'] = user['id']

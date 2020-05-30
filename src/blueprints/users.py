@@ -1,14 +1,75 @@
 from flask import (
-    Blueprint,
-    request,
-    jsonify,
-    session
+    Blueprint, request, jsonify, session
 )
 from flask.views import MethodView
 from src.database import db
 from werkzeug.security import generate_password_hash
 
+import src.auth as a
+from src.services.ads import AdsServices
+
+
 bp = Blueprint('users', __name__)
+
+
+def get_seller_id(user_id):
+    connection = db.connection
+    cursor = connection.cursor()
+    cursor.execute(
+        'SELECT id '
+        'FROM seller '
+        'WHERE seller.account_id = ?;',
+        (user_id,)
+    )
+    seller_id = cursor.fetchone()['id']
+
+    return seller_id
+
+
+def delete_seller(cursor, user_id):
+    cursor.execute(
+        f'DELETE FROM seller WHERE account_id = {user_id};'
+    )
+
+
+def get_ad_id__car_id(cursor, seller_id):
+    cursor.execute(
+        f'SELECT id, car_id FROM ad WHERE seller_id = {seller_id}'
+    )
+    info = cursor.fetchall()
+    ad_id_list = [(dict(row)['id'], dict(row)['car_id']) for row in info if row is not None]
+    return ad_id_list
+
+
+def get_account(cursor, ac_id):
+    cursor.execute(
+        'SELECT * '
+        'FROM account '
+        'WHERE account.id = ?',
+        (ac_id,)
+    )
+    fetched = cursor.fetchone()
+    account = dict(fetched) if fetched else None
+    return account
+
+
+def get_seller(cursor, user_id):
+    cursor.execute(
+        'SELECT zip_code, street, phone, home '
+        'FROM seller '
+        'WHERE seller.account_id= ?',
+        (user_id,)
+    )
+    seller = cursor.fetchone()
+    return seller
+
+
+def update_seller(cursor, seller_params, user_id):
+    cursor.execute(f'UPDATE seller SET{seller_params} WHERE account_id = {user_id};')
+
+
+def update_account(cursor, account_params, user_id):
+    cursor.execute(f'UPDATE account SET{account_params} WHERE id = {user_id};')
 
 
 # Регистрация аккаунта
@@ -49,41 +110,35 @@ def register():
             'VALUES (?,?,?,?,?,?);',
             (user['zip_code'], user['street'], user['home'], user['phone'], user['city_id'], user['id'])
         )
-        cursor.execute(
-            'INSERT INTO zipcode (zip_code, city_id) '
-            'VALUES (?,?);',
-            (user['zip_code'], user['city_id'])
-        )
         con.commit()
+        try:
+            cursor.execute(
+                'INSERT INTO zipcode (zip_code, city_id) '
+                'VALUES (?,?);',
+                (user['zip_code'], user['city_id'])
+            )
+            con.commit()
+        except:
+            pass
     return jsonify(user), 200
 
 
 # Получение данных об аккаунте и их изменение
 class UsersView(MethodView):
-    def get(self, id):
-        user_id = session.get('user_id')
-
-        if user_id is None:
-            return 'need to login', 403
-
+    @a.auth_required
+    def get(self, ac_id, user_id):
         con = db.connection
-        cursor = con.execute(
-            'SELECT * '
-            'FROM account '
-            'WHERE account.id = ?',
-            (id,)
-        )
-        account = dict(cursor.fetchone())
+        cursor = con.cursor()
+
+        account = get_account(cursor, ac_id)
+
+        if account is None:
+            return 'no account', 404
+
         account['is_seller'] = False
         del(account['password'])
 
-        cursor.execute(
-            'SELECT zip_code, street, phone, home '
-            'FROM seller '
-            'WHERE seller.account_id= ?',
-            (account['id'],)
-        )
-        seller = cursor.fetchone()
+        seller = get_seller(cursor, user_id)
 
         if seller is None:
             return jsonify(account), 200
@@ -93,13 +148,12 @@ class UsersView(MethodView):
         account['is_seller'] = True
         return jsonify(account), 200
 
-    def patch(self, id):
-        user_id = session.get('user_id')
-        if id != user_id:
-            return 'not your id in route', 403
+    @a.auth_required
+    def patch(self, ac_id, user_id):
+        if ac_id != user_id:
+            return "not your id in route", 403
 
         request_json = request.json
-
         account = {
             "first_name": request_json.get('first_name'),
             "last_name": request_json.get('password'),
@@ -120,17 +174,21 @@ class UsersView(MethodView):
         cursor = con.cursor()
 
         if is_seller is False:
-            cursor.execute(
-                f'DELETE FROM seller WHERE account_id = {id};'
-            )
+            seller_id = get_seller_id(user_id)
+            delete_seller(cursor, user_id)
+            ad_id_list = get_ad_id__car_id(cursor, seller_id) # [(ad_id, car_id), ... ]
+            if ad_id_list:
+                service = AdsServices(con)
+                for record in ad_id_list:
+                    service.delete_ad(record[0], record[1])
 
         if is_seller and seller_params:
-            cursor.execute(f'UPDATE seller SET{seller_params} WHERE account_id = {id};')
+            update_seller(cursor, seller_params, user_id)
         if account_params:
-            cursor.execute(f'UPDATE account SET{account_params} WHERE id = {id};')
+            update_account(cursor, account_params, user_id)
 
         con.commit()
-        return self.get(id)
+        return self.get(user_id)
 
 
-bp.add_url_rule('/<int:id>', view_func=UsersView.as_view('users'))
+bp.add_url_rule('/<int:ac_id>', view_func=UsersView.as_view('users'))

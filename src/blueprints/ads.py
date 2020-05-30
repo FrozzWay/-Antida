@@ -5,7 +5,71 @@ from flask.views import MethodView
 from src.database import db
 from datetime import datetime
 
+import src.auth as a
+from src.services.ads import AdsServices
+
 bp = Blueprint('ads', __name__)
+
+
+# Нечитабельный hard coding этой функции
+def get_all_filters(cursor, seller_id=None, make=None, model=None, tags=None):
+    data = []
+    ads_id_filter_by_tags = set()
+    print(type(tags))
+    if tags is not None:
+        tags = [(record,) for record in tags]
+        print(f'tupled tags = {tags}')
+        for tag in tags:  # Поиск tags с заданным именем в бд
+            cursor.execute(
+                f'SELECT id FROM tag WHERE name = ?;', tag
+            )
+            data.append(cursor.fetchone())
+        print(f'data - {data}')
+        if data:
+            tags_id = [(row['id'],) for row in data]  # [(id1,),(id2,)...]
+            for tag_id in tags_id:  # Поиск объявлений с заданными тегами в бд
+                cursor.execute(
+                    f'SELECT ad_id FROM adtag WHERE tag_id = ?', tag_id
+                )
+                data = cursor.fetchall()
+                if data:
+                    for ad_id in data:
+                        t = ad_id['ad_id']
+                        ads_id_filter_by_tags.add(f'= {t}')
+    if len(ads_id_filter_by_tags) == 0:
+        ads_id_filter_by_tags = ['IS NOT NULL']
+    ads_id = []
+    query = {
+        "seller_id": seller_id,
+        "make": make,
+        "model": model
+    }
+
+    query_params = 'AND '.join(f"{key} = '{val}' " for key, val in query.items() if val is not None)
+    if query_params:
+        query_params = 'AND ' + query_params
+
+    for ad_id in ads_id_filter_by_tags:
+        print(f'WHERE ad.id {ad_id} {query_params}')
+        cursor.execute(
+            f'SELECT ad.id '
+            f'FROM ad '
+            f'JOIN car ON car.id = ad.car_id '
+            f'WHERE ad.id {ad_id} {query_params}'
+        )
+        data = cursor.fetchall()
+        if data:
+            for record in data:
+                ads_id.append(record['id'])
+
+    con = db.connection
+    service = AdsServices(con)
+    response = []
+    if not ads_id:
+        return 'nothing found', 404
+    for ad_id in ads_id:
+        response.append(service.get_one_ad(ad_id))
+    return jsonify(response), 200
 
 
 def add_tags(cursor, request_json, ad_id):
@@ -76,65 +140,93 @@ def add_images(cursor, car, car_id):
     )
 
 
+def add_car(cursor, car):
+    cursor.execute(
+        'INSERT INTO car (make, model, mileage, reg_number, num_owners) '
+        'VALUES (?, ?, ?, ?, ?);',
+        (car['make'], car['model'], car['mileage'], car['reg_number'], car.get('num_owners'))
+    )
+
+
+def add_ad(cursor, request_json, seller_id, car_id):
+    title = request_json.get('title')
+    date = f'{int(datetime.today().timestamp())}'
+    cursor.execute(
+        'INSERT INTO ad (title, car_id, seller_id, date) '
+        'VALUES (?, ?, ?, ?);',
+        (title, car_id, seller_id, date)
+    )
+
+
+def delete_tags(cursor, ad_id):
+    cursor.execute(
+        f'DELETE FROM AdTag WHERE ad_id = {ad_id}'
+    )
+
+
+def delete_colors(cursor, car_id):
+    cursor.execute(
+        f'DELETE FROM carcolor WHERE car_id = {car_id}'
+    )
+
+
+def delete_images(cursor, car_id):
+    cursor.execute(
+        f'SELECT id from carimage WHERE car_id = {car_id}'
+    )
+    images_id_list = [tuple(dict(row).values()) for row in cursor.fetchall()]
+    cursor.executemany(
+        f'DELETE FROM image WHERE id = ?;', images_id_list
+    )
+    cursor.execute(
+        f'DELETE FROM carimage WHERE car_id = {car_id}'
+    )
+
+
+def update_title(cursor, ad_id, title):
+    cursor.execute(f'UPDATE ad SET title = "{title}" WHERE ad.id = {ad_id}')
+
+
+def update_car(cursor, car_id, car_params):
+    cursor.execute(f'UPDATE car SET{car_params} WHERE id = {car_id};')
+
+
 # Добавление объявления
 class AdsView(MethodView):
-    def post(self, id=None):
-        # check for login
-        user_id = session.get('user_id')
-        if user_id is None:
-            return 'need to login', 403
-        if id is not None and id != user_id:
-            return 'not your id on route', 403
-    # check for seller
+    def get(self, account_id=None):
+        # Export Query
+        seller_id = account_id if account_id else request.args.get('seller_id')
+        tags = request.args.get('tags').split(',')
+        print(tags)
+        make = request.args.get('make')
+        model = request.args.get('model')
         con = db.connection
-        cursor = con.execute(
-            'SELECT id '
-            'FROM seller '
-            'WHERE seller.account_id = ?;',
-            (user_id,)
-        )
-        seller_id = cursor.fetchone()['id']
+        return get_all_filters(con.cursor(), seller_id, make, model, tags)
 
-        if seller_id is None:
-            return 'you have to be seller', 403
-
+    @a.seller_auth_required
+    def post(self, user_id, seller_id, account_id=None):
+        if account_id is not None and user_id != account_id:
+            return 'not your id on route', 403
         request_json = request.json
-        title = request_json.get('title')
-        posted = f'{int(datetime.today().timestamp())}'
-
-    # Add car
+        con = db.connection
+        cursor = con.cursor()
         car = request_json.get('car')
-        cursor.execute(
-            'INSERT INTO car (make, model, mileage, reg_number, num_owners) '
-            'VALUES (?, ?, ?, ?, ?);',
-            (car['make'], car['model'], car['mileage'], car['reg_number'], car.get('num_owners'))
-        )
+        add_car(cursor, car)
         car_id = cursor.lastrowid
-
-    # Add ad
-        cursor.execute(
-            'INSERT INTO ad (title, car_id, seller_id, posted) '
-            'VALUES (?, ?, ?, ?);',
-            (title, car_id, seller_id, posted)
-        )
-        ad_id = cursor.lastrowid
-
-    # Add colors
         add_colors(cursor, car, car_id)
-
-    # Add images
         add_images(cursor, car, car_id)
-
-    # Add Tags
+        add_ad(cursor, request_json, seller_id, car_id)
+        ad_id = cursor.lastrowid
         add_tags(cursor, request_json, ad_id)
         con.commit()
 
     # Making Response
         # То, чего нет в запросе
+        date = f'{int(datetime.today().timestamp())}'
         response = {
             "id": ad_id,
             "seller_id": seller_id,
-            "posted": datetime.utcfromtimestamp(int(posted))
+            "date": datetime.utcfromtimestamp(int(date))
         }
         # Берем из запроса
         response.update(request_json)
@@ -155,120 +247,34 @@ class AdsView(MethodView):
 class PatchAdsView(MethodView):
     def get(self, ad_id):
         con = db.connection
+        service = AdsServices(con)
+        return jsonify(service.get_one_ad(ad_id)), 200
 
-        # from Ad
-        cursor = con.cursor()
-        cursor.execute(
-            f'SELECT id, title, posted, car_id, seller_id FROM ad WHERE ad.id = {ad_id};'
-        )
-        response = dict(cursor.fetchone())
-        car_id = response['car_id']
-        del(response['car_id'])
-        response["posted"] = datetime.utcfromtimestamp(int(response['posted']))
-
-        # from tag
-        cursor.execute(
-            'SELECT tag.name FROM tag '
-                'JOIN adtag ON adtag.tag_id = tag.id '
-                'JOIN ad ON ad.id = adtag.ad_id '
-            'WHERE ad.id = ?;', (ad_id,)
-        )
-        response['tags'] = [dict(row)['name'] for row in cursor.fetchall()]
-
-        # from car
-        cursor.execute(
-            f'SELECT * FROM car WHERE car.id = {car_id};'
-        )
-        response['car'] = dict(cursor.fetchone())
-        del(response['car']['id'])
-
-        # from colors
-        cursor.execute(
-            'SELECT color.id, color.name, color.hex '
-            'FROM color '
-                'JOIN carcolor ON carcolor.color_id = color.id '
-                'JOIN car ON car.id = carcolor.car_id '
-            'WHERE car.id = ?;', (car_id,)
-        )
-        response['car']['colors'] = [dict(row) for row in cursor.fetchall()]
-
-        # from images
-        cursor.execute(
-            'SELECT image.title, image.url '
-            'FROM image '
-                'JOIN carimage ON carimage.image_id = image.id '
-                'JOIN car on car.id = carimage.car_id '
-            'WHERE car.id = ?;', (car_id,)
-        )
-        response['car']['images'] = [dict(row) for row in cursor.fetchall()]
-        return jsonify(response), 200
-
-    def patch(self, ad_id=None):
-        # check for login
-        user_id = session.get('user_id')
-        if user_id is None:
-            return 'need to login', 403
-
+    @a.specific_seller_auth_required
+    def patch(self, ad_id, user_id, seller_id, car_id):
         con = db.connection
         cursor = con.cursor()
-
-        # check for seller
-        cursor.execute(
-            'SELECT id '
-            'FROM seller '
-            'WHERE seller.account_id = ?;',
-            (user_id,)
-        )
-        seller_id = cursor.fetchone()['id']
-
-        if seller_id is None:
-            return 'you have to be seller', 403
-
-        # check if ad belongs to this seller
-        cursor.execute(
-            'SELECT seller_id, car_id, account_id '
-            'FROM ad '
-                'JOIN seller ON seller.id = ad.seller_id '
-                'JOIN account ON account.id = seller.account_id '
-            'WHERE ad.id = ?',
-            (ad_id,)
-        )
-        res = dict(cursor.fetchone())
-        seller_id = res.get('seller_id')
-        car_id = res.get('car_id')
-        account_id = res.get('account_id')
-
-        if account_id is None or account_id != user_id:
-            return 'not your ad', 403
 
     # Редактируем объявление (ad)
         request_json = request.json
         car = request_json.get('car')
         title = request_json.get('title')
         if title:
-            cursor.execute(
-                f'UPDATE ad SET title = "{title}" WHERE ad.id = {ad_id}'
-            )
+            update_title(cursor, ad_id, title)
 
     # Редактируем Tags
         if request_json.get('tags') is not None:
-            cursor.execute(
-                f'DELETE FROM AdTag WHERE ad_id = {ad_id}'
-            )
+            delete_tags(cursor, ad_id)
             add_tags(cursor, request_json, ad_id)
 
     # Редактируем colors
         if car.get('colors') is not None:
-            cursor.execute(
-                f'DELETE FROM carcolor WHERE car_id = {car_id}'
-            )
+            delete_colors(cursor, car_id)
             add_colors(cursor, car, car_id)
 
     # Редактируем images
         if car.get('images') is not None:
-            cursor.execute(
-                f'DELETE FROM carimage WHERE car_id = {car_id}'
-            )
+            delete_images(cursor, car_id)
             add_images(cursor, car, car_id)
 
     # Редактируем car
@@ -281,12 +287,21 @@ class PatchAdsView(MethodView):
         }
         car_params = ','.join(f" {key} = '{val}'" for key, val in car.items() if val is not None)
         if car_params:
-            cursor.execute(f'UPDATE car SET{car_params} WHERE id = {car_id};')
+            update_car(cursor, car_id, car_params)
+
         con.commit()
         return self.get(ad_id)
 
+    @a.specific_seller_auth_required
+    def delete(self, ad_id, user_id, seller_id, car_id):
+        con = db.connection
+        service = AdsServices(con)
+        service.delete_ad(ad_id, car_id)
+        con.commit()
+        return '', 200
+
 
 bp.add_url_rule('/ads', view_func=AdsView.as_view('ads'))
-bp.add_url_rule('/users/<int:ad_id>/ads', view_func=AdsView.as_view('ads2'))
+bp.add_url_rule('/users/<int:account_id>/ads', view_func=AdsView.as_view('ads2'))
 
 bp.add_url_rule('/ads/<int:ad_id>', view_func=PatchAdsView.as_view('patch_ads'))
