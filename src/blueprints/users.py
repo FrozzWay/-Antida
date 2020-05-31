@@ -21,7 +21,8 @@ def get_seller_id(user_id):
         'WHERE seller.account_id = ?;',
         (user_id,)
     )
-    seller_id = cursor.fetchone()['id']
+    data = cursor.fetchone()
+    seller_id = data['id'] if data else None
 
     return seller_id
 
@@ -29,6 +30,14 @@ def get_seller_id(user_id):
 def delete_seller(cursor, user_id):
     cursor.execute(
         f'DELETE FROM seller WHERE account_id = {user_id};'
+    )
+
+
+def create_seller(cursor, seller, user_id):
+    cursor.execute(
+        'INSERT INTO seller (zip_code, street, home, phone, city_id, account_id) '
+        'VALUES (?,?,?,?,?,?);',
+        (seller['zip_code'], seller['street'], seller['home'], seller['phone'], seller['city_id'], user_id)
     )
 
 
@@ -73,7 +82,7 @@ def update_account(cursor, account_params, user_id):
 
 
 # Регистрация аккаунта
-@bp.route('/', methods=["POST"])
+@bp.route('', methods=["POST"])
 def register():
     request_json = request.json
 
@@ -172,18 +181,18 @@ class UsersView(MethodView):
 
         con = db.connection
         cursor = con.cursor()
-
+        seller_id = get_seller_id(user_id)
         if is_seller is False:
-            seller_id = get_seller_id(user_id)
             delete_seller(cursor, user_id)
             ad_id_list = get_ad_id__car_id(cursor, seller_id) # [(ad_id, car_id), ... ]
             if ad_id_list:
                 service = AdsServices(con)
                 for record in ad_id_list:
                     service.delete_ad(record[0], record[1])
-
-        if is_seller and seller_params:
+        if seller_id and seller_params and is_seller:
             update_seller(cursor, seller_params, user_id)
+        if seller_id is None and seller_params and is_seller:
+            create_seller(cursor, seller, user_id)
         if account_params:
             update_account(cursor, account_params, user_id)
 

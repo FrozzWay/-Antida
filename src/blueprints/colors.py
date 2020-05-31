@@ -10,7 +10,8 @@ bp = Blueprint('colors', __name__)
 
 
 class ColorsView(MethodView):
-    def get(self):
+    @a.seller_auth_required
+    def get(self, user_id, seller_id):
         con = db.connection
         cursor = con.execute(
             'SELECT * FROM color'

@@ -15,7 +15,6 @@ bp = Blueprint('ads', __name__)
 def get_all_filters(cursor, seller_id=None, make=None, model=None, tags=None):
     data = []
     ads_id_filter_by_tags = set()
-    print(type(tags))
     if tags is not None:
         tags = [(record,) for record in tags]
         print(f'tupled tags = {tags}')
@@ -26,7 +25,7 @@ def get_all_filters(cursor, seller_id=None, make=None, model=None, tags=None):
             data.append(cursor.fetchone())
         print(f'data - {data}')
         if data:
-            tags_id = [(row['id'],) for row in data]  # [(id1,),(id2,)...]
+            tags_id = [(row['id'],) for row in data if row is not None]  # [(id1,),(id2,)...]
             for tag_id in tags_id:  # Поиск объявлений с заданными тегами в бд
                 cursor.execute(
                     f'SELECT ad_id FROM adtag WHERE tag_id = ?', tag_id
@@ -70,6 +69,21 @@ def get_all_filters(cursor, seller_id=None, make=None, model=None, tags=None):
     for ad_id in ads_id:
         response.append(service.get_one_ad(ad_id))
     return jsonify(response), 200
+
+
+def get_seller_id(user_id):
+    connection = db.connection
+    cursor = connection.cursor()
+    cursor.execute(
+        'SELECT id '
+        'FROM seller '
+        'WHERE seller.account_id = ?;',
+        (user_id,)
+    )
+    data = cursor.fetchone()
+    seller_id = data['id'] if data else None
+
+    return seller_id
 
 
 def add_tags(cursor, request_json, ad_id):
@@ -195,9 +209,12 @@ def update_car(cursor, car_id, car_params):
 class AdsView(MethodView):
     def get(self, account_id=None):
         # Export Query
-        seller_id = account_id if account_id else request.args.get('seller_id')
-        tags = request.args.get('tags').split(',')
-        print(tags)
+        seller_id = get_seller_id(account_id) if get_seller_id(account_id) else request.args.get('seller_id')
+        if seller_id is None and account_id is not None:
+            return 'nothing found', 404
+        tags = request.args.get('tags')
+        if tags:
+            tags = request.args.get('tags').split(',')
         make = request.args.get('make')
         model = request.args.get('model')
         con = db.connection
