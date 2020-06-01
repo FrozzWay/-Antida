@@ -3,7 +3,7 @@ from flask import (
     Blueprint,
     session
 )
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 from src.database import db
 
 bp = Blueprint('auth', __name__)

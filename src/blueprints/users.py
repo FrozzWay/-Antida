@@ -1,84 +1,13 @@
 from flask import (
-    Blueprint, request, jsonify, session
+    Blueprint, request
 )
 from flask.views import MethodView
-from src.database import db
 from werkzeug.security import generate_password_hash
 
 import src.auth as a
-from src.services.ads import AdsServices
-
+from src.services.sqllite import *
 
 bp = Blueprint('users', __name__)
-
-
-def get_seller_id(user_id):
-    connection = db.connection
-    cursor = connection.cursor()
-    cursor.execute(
-        'SELECT id '
-        'FROM seller '
-        'WHERE seller.account_id = ?;',
-        (user_id,)
-    )
-    data = cursor.fetchone()
-    seller_id = data['id'] if data else None
-
-    return seller_id
-
-
-def delete_seller(cursor, user_id):
-    cursor.execute(
-        f'DELETE FROM seller WHERE account_id = {user_id};'
-    )
-
-
-def create_seller(cursor, seller, user_id):
-    cursor.execute(
-        'INSERT INTO seller (zip_code, street, home, phone, city_id, account_id) '
-        'VALUES (?,?,?,?,?,?);',
-        (seller['zip_code'], seller['street'], seller['home'], seller['phone'], seller['city_id'], user_id)
-    )
-
-
-def get_ad_id__car_id(cursor, seller_id):
-    cursor.execute(
-        f'SELECT id, car_id FROM ad WHERE seller_id = {seller_id}'
-    )
-    info = cursor.fetchall()
-    ad_id_list = [(dict(row)['id'], dict(row)['car_id']) for row in info if row is not None]
-    return ad_id_list
-
-
-def get_account(cursor, ac_id):
-    cursor.execute(
-        'SELECT * '
-        'FROM account '
-        'WHERE account.id = ?',
-        (ac_id,)
-    )
-    fetched = cursor.fetchone()
-    account = dict(fetched) if fetched else None
-    return account
-
-
-def get_seller(cursor, user_id):
-    cursor.execute(
-        'SELECT zip_code, street, phone, home '
-        'FROM seller '
-        'WHERE seller.account_id= ?',
-        (user_id,)
-    )
-    seller = cursor.fetchone()
-    return seller
-
-
-def update_seller(cursor, seller_params, user_id):
-    cursor.execute(f'UPDATE seller SET{seller_params} WHERE account_id = {user_id};')
-
-
-def update_account(cursor, account_params, user_id):
-    cursor.execute(f'UPDATE account SET{account_params} WHERE id = {user_id};')
 
 
 # Регистрация аккаунта
@@ -106,26 +35,14 @@ def register():
 
     con = db.connection
     cursor = con.cursor()
-    cursor.execute(
-        'INSERT INTO account (email, password, first_name, last_name) '
-        'VALUES (?,?,?,?); ',
-        (user['email'], password_hash, user['first_name'], user['last_name'])
-    )
+    create_account(cursor, user, password_hash)
     con.commit()
     if is_seller is not False:
         user['id'] = cursor.lastrowid
-        cursor.execute(
-            'INSERT INTO seller (zip_code, street, home, phone, city_id, account_id) '
-            'VALUES (?,?,?,?,?,?);',
-            (user['zip_code'], user['street'], user['home'], user['phone'], user['city_id'], user['id'])
-        )
+        create_seller(cursor, user, user['id'])
         con.commit()
         try:
-            cursor.execute(
-                'INSERT INTO zipcode (zip_code, city_id) '
-                'VALUES (?,?);',
-                (user['zip_code'], user['city_id'])
-            )
+            create_zipcode(cursor, user)
             con.commit()
         except:
             pass
