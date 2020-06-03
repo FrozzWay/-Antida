@@ -21,15 +21,18 @@ class CitiesView(MethodView):
         name = request.json.get('name')
         con = db.connection
         cursor = con.cursor()
-        cursor.execute(
-            f'INSERT INTO city (name) VALUES (?);', (name,)
-        )
-        con.commit()
-        response = {
-            "id": cursor.lastrowid,
-            "name": name
-        }
-        return jsonify(response), 200
+        try:
+            cursor.execute(
+                f'INSERT INTO city (name) VALUES (?);', (name,)
+            )
+            con.commit()
+            response = {
+                "id": cursor.lastrowid,
+                "name": name
+            }
+            return jsonify(response), 200
+        except:
+            return 'Уже существует', 400
 
 
 bp.add_url_rule('/cities', view_func=CitiesView.as_view('city'))
