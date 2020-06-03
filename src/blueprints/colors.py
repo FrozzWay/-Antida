@@ -28,19 +28,22 @@ class ColorsView(MethodView):
         name = request_json.get('name')
         hex = request_json.get('hex')
 
-        cursor.execute('INSERT INTO color (name, hex) VALUES (?, ?)', (name, hex))
-        con.commit()
+        try:
+            cursor.execute('INSERT INTO color (name, hex) VALUES (?, ?)', (name, hex))
+            con.commit()
 
-        color_id = cursor.lastrowid
-        print(color_id)
+            color_id = cursor.lastrowid
+            print(color_id)
 
-        response = {
-            "id": color_id,
-            "name": name,
-            "hex": hex
-        }
+            response = {
+                "id": color_id,
+                "name": name,
+                "hex": hex
+            }
 
-        return jsonify(response), 200
+            return jsonify(response), 200
+        except:
+            return {"error": "hex is not unique"}, 400
 
 
 bp.add_url_rule('/colors', view_func=ColorsView.as_view('colors'))
