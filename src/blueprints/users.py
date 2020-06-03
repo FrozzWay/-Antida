@@ -59,7 +59,10 @@ class UsersView(MethodView):
         account = get_account(cursor, ac_id)
 
         if account is None:
-            return 'no account', 404
+            response = {
+                "error": 'no account'
+            }
+            return jsonify(response), 404
 
         account['is_seller'] = False
         del(account['password'])

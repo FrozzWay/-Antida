@@ -15,7 +15,10 @@ class AdsView(MethodView):
         # Export Query
         seller_id = get_seller_id(account_id) if get_seller_id(account_id) else request.args.get('seller_id')
         if seller_id is None and account_id is not None:
-            return 'nothing found', 404
+            response = {
+                "error": "nothing found"
+            }
+            return jsonify(response), 404
         tags = request.args.get('tags')
         if tags:
             tags = request.args.get('tags').split(',')
@@ -27,7 +30,10 @@ class AdsView(MethodView):
     @a.seller_auth_required
     def post(self, user_id, seller_id, account_id=None):
         if account_id is not None and user_id != account_id:
-            return 'not your id on route', 403
+            response = {
+                "error": "not your id on route"
+            }
+            return jsonify(response), 403
         request_json = request.json
         con = db.connection
         cursor = con.cursor()

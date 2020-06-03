@@ -1,7 +1,8 @@
 from flask import (
     request,
     Blueprint,
-    session
+    session,
+    jsonify
 )
 from werkzeug.security import check_password_hash
 from src.database import db
@@ -25,7 +26,10 @@ def login():
     user = cursor.fetchone()
 
     if user is None or not check_password_hash(user['password'], password):
-        return 'invalid password or email', 403
+        response = {
+            "error": "invalid password or email"
+        }
+        return jsonify(response), 403
 
     session['user_id'] = user['id']
     return '', 200

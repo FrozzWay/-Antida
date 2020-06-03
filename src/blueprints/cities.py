@@ -32,7 +32,10 @@ class CitiesView(MethodView):
             }
             return jsonify(response), 200
         except:
-            return 'Уже существует', 400
+            response = {
+                "error": 'Уже существует'
+            }
+            return jsonify(response), 400
 
 
 bp.add_url_rule('/cities', view_func=CitiesView.as_view('city'))

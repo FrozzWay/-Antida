@@ -1,7 +1,6 @@
 from functools import wraps
 
-from flask import session
-
+from flask import session, jsonify
 from src.database import db
 
 from src.services.ads import AdsServices
@@ -39,7 +38,7 @@ def auth_required(view_func):
     def wrapper(*args, **kwargs):
         user_id = login()
         if user_id is None:
-            return 'need to login', 403
+            return {"error": 'need to login'}, 403
         return view_func(*args, **kwargs, user_id=user_id)
     return wrapper
 
@@ -49,11 +48,12 @@ def seller_auth_required(view_func):
     def wrapper(*args, **kwargs):
         user_id = login()
         if user_id is None:
-            return 'need to login', 403
+            response = {"error": "need to login"}
+            return jsonify(response), 403
 
         seller_id = get_seller_id(user_id)
         if seller_id is None:
-            return 'you have to be seller', 403
+            return {"error": 'you have to be seller'}, 403
 
         return view_func(*args, **kwargs, user_id=user_id, seller_id=seller_id)
     return wrapper
@@ -64,17 +64,17 @@ def specific_seller_auth_required(view_func):
     def wrapper(*args, **kwargs):
         user_id = login()
         if user_id is None:
-            return 'need to login', 403
+            return {"error": 'need to login'}, 403
 
         seller_id = get_seller_id(user_id)
         if seller_id is None:
-            return 'you have to be seller', 403
+            return {"error": 'you have to be seller'}, 403
 
         service = AdsServices(db.connection)
         account_id, seller_id, car_id = service.get_ad__account_info(kwargs['ad_id'])
         # check if ad belongs to this user
         if account_id is None or account_id != user_id:
-            return 'not your ad', 403
+            return {"error": 'not your ad'}, 403
 
         return view_func(*args, **kwargs, user_id=user_id, seller_id=seller_id, car_id=car_id)
     return wrapper
